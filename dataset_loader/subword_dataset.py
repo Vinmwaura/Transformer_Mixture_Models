@@ -1,8 +1,19 @@
+import csv
+import json
 import math
 import random
 
+import numpy as np
+
 import torch
 from torch.utils.data import Dataset
+
+# Force the RNG to be deterministic to help when comparing model's performances.
+seed_value = 69
+
+torch.manual_seed(seed_value)
+np.random.seed(seed_value)
+random.seed(seed_value)
 
 """
 Load SubWord Dataset.
@@ -10,36 +21,51 @@ Load SubWord Dataset.
 class SubWord_Dataset(Dataset):
     def __init__(
             self,
-            tr_data,
-            delimiter,
+            csv_fpath,
             start_token,
             padding_token,
-            context_window=200):
+            context_window,
+            get_filenames=False):
         self.start_token = start_token
+        self.padding_token = padding_token
 
-        self.dataset = []
+        self.get_filenames = get_filenames
 
-        # Init append chunk from start of dataset.
-        self.dataset.append(tr_data[0:0 + context_window ])
+        self.context_window = context_window
 
-        # Iterate over dataset and create chunks using delimiter as point to start.
-        for index in range(1, len(tr_data) - context_window):
-            if tr_data[index] == delimiter and tr_data[index + 1] != delimiter:
-                temp_chunk_data = tr_data[index + 1:index + 1 + context_window]
-
-                len_data = len(temp_chunk_data)
-                temp_padding_list = [padding_token] * (len_data - context_window)
-                temp_chunk_data.extend(temp_padding_list)
-                self.dataset.append(temp_chunk_data)
+        with open(csv_fpath, "r") as f:
+            csv_reader = csv.reader(f)
+            self.fpaths_list = list(csv_reader)
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.fpaths_list)
 
     def __getitem__(self, index):
-        input_data = [self.start_token] + self.dataset[index][:-1]
-        target_data = self.dataset[index][:]
+        np_fpath = self.fpaths_list[index][0]
 
-        input_tensor = torch.tensor(input_data)
-        target_tensor = torch.tensor(target_data)
+        loaded_data = np.load(np_fpath)
 
-        return input_tensor, target_tensor    
+        numpy_data = loaded_data["data"]
+        numpy_encodings = loaded_data["encodings"]
+
+        numpy_start_token = np.array([self.start_token])
+
+        input_data = np.concatenate([numpy_start_token, numpy_data[:-1]])
+        target_data = numpy_data
+
+        in_pad_tokens = [self.padding_token] * (self.context_window - len(input_data))
+        numpy_in_pad_tokens = np.array(in_pad_tokens)
+        input_data = np.concatenate([input_data, numpy_in_pad_tokens])
+
+        target_pad_tokens = [self.padding_token - 1] * (self.context_window - len(target_data))
+        numpy_target_pad_tokens = np.array(target_pad_tokens)
+        target_data = np.concatenate([target_data, numpy_target_pad_tokens])
+
+        input_tensor = torch.from_numpy(input_data).long()
+        target_tensor = torch.from_numpy(target_data).long()
+        encodings_tensor = torch.from_numpy(numpy_encodings).float()
+
+        if self.get_filenames:
+            return np_fpath, input_tensor, target_tensor, encodings_tensor
+        else:
+            return input_tensor, target_tensor, encodings_tensor
