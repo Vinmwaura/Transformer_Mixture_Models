@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 """
 Sinusoidal Position embeddings.
 """
@@ -51,6 +52,7 @@ def get_activation(activation_type):
         ['tanh', nn.Tanh()],
     ])
     return activations_dict[activation_type]
+
 
 """
 Linear layers.
@@ -115,12 +117,12 @@ class SelfAttentionBlock(nn.Module):
             heads=8,
             embedding_dim=512,
             hidden_dim=2_048,
-            use_masked_attn=True,
+            is_causal=True,
             activation_type="gelu"):
         super().__init__()
 
         self.heads = heads
-        self.use_masked_attn = use_masked_attn
+        self.is_causal = is_causal
 
         self.q_block = nn.Sequential(
             LinearBlock(
@@ -175,19 +177,17 @@ class SelfAttentionBlock(nn.Module):
         qk_T = torch.einsum("nhqd,nhkd->nhqk", q_head_split, k_head_split)
         qk_T_normalized = qk_T / (D_split**0.5)  # (N, H, Seq_q, Seq_k)
 
-        if self.use_masked_attn:
+        if self.is_causal:
             _, Seq, _ = x.shape
             # (1, 1, Seq, Seq)
-            mask = torch.ones((1, 1, Seq, Seq), device=q.device)
+            mask = torch.ones((1,1,Seq,Seq), device=q.device)
             mask = torch.triu(mask, diagonal=1)
+            mask_bool = mask.bool()
 
             # (N, H, Seq_q, Seq_k)
-            qk_T_normalized_masked = (qk_T_normalized * (1 - mask)) + (2e9 * mask)
-            qk_T_normalized_masked[qk_T_normalized_masked>=2e9] = -torch.inf
+            qk_T_normalized.masked_fill_(mask_bool, -torch.inf)
 
-            qk_T_softmax = F.softmax(qk_T_normalized_masked, dim=3)  # (N, H, Seq_q, Seq_k)
-        else:
-            qk_T_softmax = F.softmax(qk_T_normalized, dim=3)  # (N, H, Seq_q, Seq_k)
+        qk_T_softmax = F.softmax(qk_T_normalized, dim=3)  # (N, H, Seq_q, Seq_k)
 
         # (N, H, Seq, D_split)
         attention_out = torch.einsum("nhqk,nhkd->nhqd", qk_T_softmax, v_head_split)
@@ -195,85 +195,6 @@ class SelfAttentionBlock(nn.Module):
         # Merge multi-head computations.
         N, Head, Seq, Dsplit = attention_out.shape
         attention_out = attention_out.permute(0, 2, 1, 3).reshape(N, Seq, Head*Dsplit)  # (N, Seq, D)
-        return attention_out
-
-
-"""
-Cross-Attention Block.
-"""
-class CrossAttentionBlock(nn.Module):
-    def __init__(
-            self,
-            heads=8,
-            hidden_dim=2_048,
-            embedding_dim=512,
-            activation_type="gelu"):
-        super().__init__()
-
-        self.heads = heads
-
-        self.q_block = nn.Sequential(
-            LinearBlock(
-                in_dim=embedding_dim,
-                out_dim=hidden_dim,
-                use_activation=True,
-                activation_type=activation_type),
-            LinearBlock(
-                in_dim=hidden_dim,
-                out_dim=embedding_dim,
-                use_activation=False))
-        self.k_block = nn.Sequential(
-            LinearBlock(
-                in_dim=embedding_dim,
-                out_dim=hidden_dim,
-                use_activation=True,
-                activation_type=activation_type),
-            LinearBlock(
-                in_dim=hidden_dim,
-                out_dim=embedding_dim,
-                use_activation=False))          
-        self.v_block = nn.Sequential(
-            LinearBlock(
-                in_dim=embedding_dim,
-                out_dim=hidden_dim,
-                use_activation=True,
-                activation_type=activation_type),
-            LinearBlock(
-                in_dim=hidden_dim,
-                out_dim=embedding_dim,
-                use_activation=False))
-
-    def forward(self, x, enc):
-        q = self.q_block(x)  # (N, Seq_q, D)
-        k = self.k_block(enc)  # (N, Seq_k, D)
-        v = self.v_block(enc)  # (N, Seq_v, D)
-
-        N_q, Seq_q, D = q.shape
-        _, Seq_k, _ = k.shape
-        _, Seq_v, _ = v.shape
-        D_split = D // self.heads
-
-        # Logically split into heads.
-        # (N, H, Seq_q, D_split)
-        q_head_split = q.reshape(
-            N_q, Seq_q, self.heads, D_split).permute(0, 2, 1, 3)
-        k_head_split = k.reshape(
-            N_q, Seq_k, self.heads, D_split).permute(0, 2, 1, 3)
-        v_head_split = v.reshape(
-            N_q, Seq_v, self.heads, D_split).permute(0, 2, 1, 3)
-
-        # (N, H, Seq_q, D_split),(N, H, Seq_k, D_split) => (N, H, Seq_q, Seq_k)
-        qk_T = torch.einsum("nhqd,nhkd->nhqk", q_head_split, k_head_split)
-        qk_T_normalized = qk_T / (D_split**0.5)  # (N, H, Seq_q, Seq_k)
-
-        qk_T_softmax = F.softmax(qk_T_normalized, dim=3)  # (N, H, Seq_q, Seq_k)
-
-        # (N, H, Seq_q, D_split)
-        attention_out = torch.einsum("nhqv,nhvd->nhqd", qk_T_softmax, v_head_split)
-
-        # Merge multi-head computations.
-        # (N, Seq, D)
-        attention_out = attention_out.permute(0, 2, 1, 3).reshape(N_q, Seq_q, self.heads*D_split)
         return attention_out
 
 
@@ -286,39 +207,21 @@ class TransformerBlock(nn.Module):
             heads=8,
             hidden_dim=2048,
             embedding_dim=512,
-            use_self_attn=True,
-            use_cross_attn=True,
-            use_masked_attn=False,
+            is_causal=False,
             activation_type="gelu"):
         super().__init__()
 
-        self.use_self_attn = use_self_attn
-        self.use_cross_attn = use_cross_attn
-
-        # Self Attention.
-        if self.use_self_attn:
-            self.self_attn_block = SelfAttentionBlock(
-                heads=heads,
-                embedding_dim=embedding_dim,
-                hidden_dim=hidden_dim,
-                use_masked_attn=use_masked_attn,
-                activation_type=activation_type)
-            self.self_attn_ffn_res = ResidualLinearBlock(
-                dim=embedding_dim,
-                activation_type=activation_type)
-            self.self_attn_norm = nn.LayerNorm(embedding_dim)
-
-        # Cross Attention.
-        if self.use_cross_attn:
-            self.cross_attn_block = CrossAttentionBlock(
-                heads=heads,
-                embedding_dim=embedding_dim,
-                hidden_dim=hidden_dim,
-                activation_type=activation_type)
-            self.cross_attn_res = ResidualLinearBlock(
-                dim=embedding_dim,
-                activation_type=activation_type)
-            self.cross_attn_norm = nn.LayerNorm(embedding_dim)
+        # Self Attention Block.
+        self.self_attn_block = SelfAttentionBlock(
+            heads=heads,
+            embedding_dim=embedding_dim,
+            hidden_dim=hidden_dim,
+            is_causal=is_causal,
+            activation_type=activation_type)
+        self.self_attn_ffn_res = ResidualLinearBlock(
+            dim=embedding_dim,
+            activation_type=activation_type)
+        self.self_attn_norm = nn.LayerNorm(embedding_dim)
 
         # FeedForward Layer.
         self.feed_forward = nn.Sequential(
@@ -339,18 +242,12 @@ class TransformerBlock(nn.Module):
         self.feed_forward_norm = nn.LayerNorm(embedding_dim)
 
     def forward(self, x, enc=None):
-        if self.use_self_attn:
-            x_self_attn = self.self_attn_block(x)
-            x_self_attn_res = self.self_attn_ffn_res(x_self_attn, x)
-            x = self.self_attn_norm(x_self_attn_res)
+        x_self_attn = self.self_attn_block(x)
+        x_self_attn_res = self.self_attn_ffn_res(x_self_attn, x)
+        x_self_attn_norm = self.self_attn_norm(x_self_attn_res)
 
-        if self.use_cross_attn:
-            x_cross_attn = self.cross_attn_block(x, enc)
-            x_cross_attn_res = self.cross_attn_res(x_cross_attn, x)
-            x = self.cross_attn_norm(x_cross_attn_res)
-
-        x_ff = self.feed_forward(x)
-        x_ff_res = self.feed_forward_res(x_ff, x)
+        x_ff = self.feed_forward(x_self_attn_norm)
+        x_ff_res = self.feed_forward_res(x_ff, x_self_attn_norm)
         x_ff_norm = self.feed_forward_norm(x_ff_res)
 
         return x_ff_norm
