@@ -137,7 +137,7 @@ def save_vocabulary(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate subword Vocabulary from text file.")
+        description="Generate Subword Vocabulary from text file.")
 
     parser.add_argument(
         "--device",
@@ -157,7 +157,7 @@ def main():
         default=2_048)
     parser.add_argument(
         "--out-path",
-        help="Destination output path for json dictionary.",
+        help="Destination output path for Vocabulary json.",
         required=True,
         type=pathlib.Path)
 
@@ -225,7 +225,7 @@ def main():
     logging.info(f"Init Vocabulary:\n{sorted_vocabs}")
     logging.info(f"Max Vocabulary Size: {vocab_size:,}.")
 
-    # Convert list of integers into tensors (int16 ranges: -32,768 to 32,767).
+    # Convert list of integers into tensors (int16 ranges: -32,768 to 32,767) for memory efficiency.
     subwords_indices_tensor = torch.tensor(
         subwords_indices_list,
         device=device,

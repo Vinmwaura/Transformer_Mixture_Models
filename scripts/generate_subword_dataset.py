@@ -126,6 +126,8 @@ def generate_dataset(
         out_path,
         vocab_list,
         filepaths_list):
+    dataset_paths_list = []
+
     vocabulary_path = os.path.join(
         out_path,
         "vocabulary.json")
@@ -207,6 +209,7 @@ def generate_dataset(
             out_fpath = os.path.join(
                 out_path,
                 f"{filename}.json")
+            dataset_paths_list.append(out_fpath)
 
             try:
                 json_data = {
@@ -219,6 +222,14 @@ def generate_dataset(
             except Exception as e:
                 raise e
 
+        # Needs to be manually split into train and test segments.
+        csv_dest_path = os.path.join(out_path, "dataset.csv")
+
+        logging.info(f"Saving CSV Dataset to : {csv_dest_path}")
+        with open(csv_dest_path, "w") as f:
+            writer = csv.writer(f)
+            for dataset_fpath in dataset_paths_list:
+                writer.writerow([dataset_fpath])
         logging.info("*" * 100)
 
 def main():
@@ -261,7 +272,7 @@ def main():
     # Log file path.
     log_path = os.path.join(
         out_path,
-        "Subword_dataset.log")
+        "subword_dataset.log")
 
     # Logs Info to parent directory.
     logging.basicConfig(
@@ -269,7 +280,7 @@ def main():
         format="%(asctime)s %(message)s",
         encoding='utf-8',
         handlers=[
-            # logging.FileHandler(log_path),
+            logging.FileHandler(log_path),
             logging.StreamHandler()
         ],
         level=logging.DEBUG,
