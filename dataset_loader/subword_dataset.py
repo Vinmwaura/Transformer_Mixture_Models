@@ -8,7 +8,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-# Force the RNG to be deterministic to help when comparing model's performances.
+# HACK: Force the RNG to be deterministic to help when comparing model's performances.
+# Too time consuming to properly train model(s) multiple times to get a proper measure.
 seed_value = 69
 
 torch.manual_seed(seed_value)
@@ -24,12 +25,9 @@ class SubWord_Dataset(Dataset):
             csv_fpath,
             start_token,
             padding_token,
-            context_window,
-            get_filenames=False):
+            context_window):
         self.start_token = start_token
         self.padding_token = padding_token
-
-        self.get_filenames = get_filenames
 
         self.context_window = context_window
 
@@ -43,10 +41,7 @@ class SubWord_Dataset(Dataset):
     def __getitem__(self, index):
         np_fpath = self.fpaths_list[index][0]
 
-        loaded_data = np.load(np_fpath)
-
-        numpy_data = loaded_data["data"]
-        numpy_encodings = loaded_data["encodings"]
+        numpy_data = np.load(np_fpath)
 
         numpy_start_token = np.array([self.start_token])
 
@@ -63,9 +58,5 @@ class SubWord_Dataset(Dataset):
 
         input_tensor = torch.from_numpy(input_data).long()
         target_tensor = torch.from_numpy(target_data).long()
-        encodings_tensor = torch.from_numpy(numpy_encodings).float()
 
-        if self.get_filenames:
-            return np_fpath, input_tensor, target_tensor, encodings_tensor
-        else:
-            return input_tensor, target_tensor, encodings_tensor
+        return input_tensor, target_tensor
