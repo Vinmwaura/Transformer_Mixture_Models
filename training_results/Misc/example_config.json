@@ -1,0 +1,12 @@
+{
+    "num_heads": 32,
+    "num_blocks": 2,
+    "embedding_dim": 512,
+    "hidden_dim": 1024,
+    "context_window": 256,
+    "activation_type": "gelu",
+    "max_global_steps": 10000,
+    "model_lr": 1e-4,
+    "num_mixture": 16,
+    "mixture_type": "blocks"
+}
