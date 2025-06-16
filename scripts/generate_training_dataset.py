@@ -23,6 +23,7 @@ def generate_dataset(
     tr_fpaths_list = []
     tr_dest_path = os.path.join(out_path, "train")
     for tr_fpath in tr_fpaths:
+        tr_fpath = tr_fpath[0]
         with open(tr_fpath, "r") as tr_f:
             data_dict = json.load(tr_f)
             tr_all_data = data_dict["data"]
@@ -52,7 +53,7 @@ def generate_dataset(
         for tr_index, tr_split_data in enumerate(tr_split_data_list):
             tr_index_fpath = os.path.join(
                 tr_out_path,
-                f"{tr_index}.np")
+                f"{tr_index}.npy")
 
             tr_fpaths_list.append(tr_index_fpath)
 
@@ -68,6 +69,7 @@ def generate_dataset(
     tst_fpaths_list = []
     tst_dest_path = os.path.join(out_path, "test")
     for tst_fpath in tst_fpaths:
+        tst_fpath = tst_fpath[0]
         with open(tst_fpath, "r") as tst_f:
             data_dict = json.load(tst_f)
             tst_all_data = data_dict["data"]
@@ -97,7 +99,7 @@ def generate_dataset(
         for tst_index, tst_split_data in enumerate(tst_split_data_list):
             tst_index_fpath = os.path.join(
                 tst_out_path,
-                f"{tst_index}.np")
+                f"{tst_index}.npy")
 
             tst_fpaths_list.append(tst_index_fpath)
 
@@ -142,7 +144,7 @@ def main():
         type=int)
     parser.add_argument(
         "--tr-dataset-path",
-        help="Filepath to csv file containing list of .txt files for test dataset.",
+        help="Filepath to csv file containing list of .txt files for train dataset.",
         required=True,
         type=pathlib.Path)
     parser.add_argument(
