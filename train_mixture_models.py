@@ -88,6 +88,11 @@ def main():
         type=int,
         default=64)
     parser.add_argument(
+        "--use-activation-checkpoint",
+        help="Use activation checkpointing to trade computation speed for more memory.",
+        type=bool,
+        default=False)
+    parser.add_argument(
         "--checkpoint-steps",
         help="Steps for checkpointing and/or testing model.",
         type=int,
@@ -128,6 +133,7 @@ def main():
     tst_dataset_path = args["tst_dataset_path"]  # Training csv file path (*.csv).
     batch_size = args["batch_size"]  # Batch size of training dataset.
     model_checkpoint = args["model_checkpoint"]  # Filepath to models saved.
+    use_activation_checkpoint = args["use_activation_checkpoint"]
     checkpoint_steps = args["checkpoint_steps"]  # Steps to checkpoint model.
     out_dir = args["out_dir"]  # Destination path for model.
     try:
@@ -201,6 +207,7 @@ def main():
             num_heads=num_heads,
             num_blocks=num_blocks,
             out_classes=vocab_size + 1,  # Includes only [PAD] tokens.
+            use_checkpoint=use_activation_checkpoint,
             activation_type=activation_type)
     elif mixture_type == "blocks":
         mixture_model = MixtureofBlocks(
@@ -211,6 +218,7 @@ def main():
             num_heads=num_heads,
             num_blocks=num_blocks,
             out_classes=vocab_size + 1,  # Includes only [PAD] tokens.
+            use_checkpoint=use_activation_checkpoint,
             activation_type=activation_type)
     else:
         raise Exception("Invalid Mixture type!")
