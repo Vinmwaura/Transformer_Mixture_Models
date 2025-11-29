@@ -2,9 +2,16 @@
 ## Description
 This project is an attempt at using mixture models approach with transformer models that draws inspiration from [Gaussian Mixture Model](https://brilliant.org/wiki/gaussian-mixture-model/) (GMM) algorithm (not 100% exact), [Stacking Ensemble](https://arxiv.org/abs/2104.02395) algorithm, and [Inception module](https://arxiv.org/abs/1409.4842). The core idea is to use multiple transformer models stacked together (side by side) and force them to focus on different features of the input, by simply concatenating their outputs. The concatenated output is either passed to a shared classifier layer or treated as the final output. The models don't communicate with each other, but are intended to act as one large model (Mixture).
 
-The overall aim of such an approach is to scale the model without increasing model depth (number of layers), increasing the dimensions of the intermediate feed-forward layers, or using techniques such as [Mixture of Experts](https://arxiv.org/abs/2407.06204) (MoE), and their variants. Stacking is not performed in the layer of any of the models like with most implementations but rather as an ensemble of neural network models, because why not.
+The overall aim of such an approach is to scale the model without increasing model depth (number of layers), increasing the dimensions of the intermediate feed-forward layers, or using techniques such as [Mixture of Experts](https://arxiv.org/abs/2407.06204) (MoE), and their variants. Stacking is not performed in the layer of any of the models like with most implementations but rather as an ensemble of neural network models, because **WHY NOT!**
 
-## Theory (How it works)
+## Background
+### Neural Networks
+Neural Networks are considered [universal function approximators](https://en.wikipedia.org/wiki/Universal_approximation_theorem), meaning they can approximate any continuous function given sufficient capacity. When provided with an input, such as a vector or a matrix (e.g images), a neural network transforms it through a series of operations to produce an output suitable for a specific task such as multi-class classification.
+
+These transformations involve matrix multiplications, bias additions and non-linear activations, all of which are combined to form layers in model. The intermediate outputs between layers, often call feature vectors, can be visualized in abstract feature space, where each dimension represents a learned features/characteristics from the data.
+
+The expressive power of a neural network depends on it's architecture, particularly its depth (number of layers) and width (size of intermediate vectors, controlled by weight matrices). While larger models are generally more capable, they also introduce greater computational complexity and are more prone to overfitting, especially when training data is limited.
+
 ### Gaussian Mixture Model (GMM)
 A Gaussian Mixture Model (GMM) is a probabilistic model that assumes data points are generated from a mixture of a finite number of Gaussian distributions, each with unknown parameters such as component weights, means, and variances (or covariances). By combining multiple simple (unimodal) Gaussian components and using the [Expectation–maximization](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm) algorithm, GMMs can perform soft clustering and estimate complex functions for density estimation. The core idea is that while a single Gaussian distribution cannot capture complex data patterns, a mixture of them provides greater flexibility and expressiveness, enabling the modeling of more intricate distributions.
 
@@ -26,14 +33,7 @@ An inception module was a technique used for Computer Vision tasks (utilizing [C
   <img alt="Inception module block diagram" src="assets/Inception_module.jpg" />
 </p>
 
-### Neural Networks
-Neural Networks are considered [universal function approximators](https://en.wikipedia.org/wiki/Universal_approximation_theorem), meaning they can approximate any continuous function given sufficient capacity. When provided with an input, such as a vector or a matrix (e.g images), a neural network transforms it through a series of operations to produce an output suitable for a specific task such as multi-class classification.
-
-These transformations involve matrix multiplications, bias additions and non-linear activations, all of which are combined to form layers in model. The intermediate outputs between layers, often call feature vectors, can be visualized in abstract feature space, where each dimension represents a learned features/characteristics from the data.
-
-The expressive power of a neural network depends on it's architecture, particularly its depth (number of layers) and width (size of intermediate vectors, controlled by weight matrices). While larger models are generally more capable, they also introduce greater computational complexity and are more prone to overfitting, especially when training data is limited
-
-### My Proposal
+## My Proposal
 This project aims to combine the above mentioned concepts (GMM, Stacking Ensemble, and Inception Module) in such a manner that allows a neural network model, in this case a Transformer model to scale without needing to increase the depth or width. The core idea being to stack multiple models (side by side), mixture of models. The outputs of each model, which are usually reduced dimension-wise, are simply concatenated together and either treated as the final output or passed to a shared layer for final prediction. The concatenation operation ensures that each model's output focuses on different attributes of the data, and thereby specializing on a given feature/characterics. This is similar to how [Sparse Mixture of Experts](https://arxiv.org/abs/1701.06538) (MoE) work, where they utilize a mixture of experts that specialize on certain data / features by only allowing one expert to be active for a given data. This usually leads to them needing to employ complicated mechanisms such as router networks and auxiliary losses to ensure certain experts are not left underutilized (load balancing). My implementation does not have this issue, as no load balancing is needed. 
 
 <p align="center">
@@ -122,7 +122,8 @@ Depth the model (number of "block" grouping) used was between 1 and 2, and numbe
 
 Observation: As the number of mixtures kept increasing, for all depth sizes tested, the model seemed to perform better (lower testing loss). Some notable dimishing returns was observed when going from 8 to 16 mixtures, which should be expected as other factors like model depth became the limiting factor. It should be noted that, in some cases, shallow models (depth=1) with higher number of mixtures outperformed deeper models (depth=2) with no mixtures i.e baseline models. 
 
-Conclusion: Seems to work well, up to a point. Needs to be tested at scale to see if trend holds. This architecture may benefit a lot from distributed computing. 
+## Conclusion
+My proposal seems to work well, up to a point (hardware constraints limited training time and model scaling). It needs to be tested at scale to see if the positive trend holds. This architecture may benefit a lot from distributed computing where each mixture runs on its own hardware and their results are combined and sent to one of the hardware device for further processing (In case of 'block' mixture types).
 
 ## Additional Relevant Links.
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
